@@ -45,7 +45,7 @@ Incluye un simulador HTML/JS donde se pueden manipular parámetros de las curvas
 - `Random seed`: controla la variabilidad estocástica \( \epsilon(t) \).  
 - `Number of curves`: define el tamaño del grupo de simulación \( N \).  
 
-👉 [Abrir Sandbox de HRV + FPCA](https://github.com/usuario/proyecto)  
+👉 [Abrir Sandbox de HRV + FPCA]([https://github.com/usuario/proyecto](https://enydog.github.io/HRV-Recovery-FPCA/))  
 
 ---
 
