@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HRV + FPCA (Animated, with Overshoot)</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#101a33; --ink:#e7eefc; --mut:#a5b4d6; --grid:#223455;
+    --c1:#4caf50; --c2:#ffb86b; --c3:#ff6e8a; --c4:#7aa2f7; --gold:#ffd84d;
+  }
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,Segoe UI,Inter,Arial}
+  .wrap{max-width:1200px;margin:18px auto;padding:0 16px}
+  h1{font-size:22px;margin:4px 0 8px}
+  .card{background:var(--panel);border:1px solid #1a2a48;border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.35);padding:12px}
+  .row{display:grid;grid-template-columns:320px 1fr;gap:14px}
+  .ctrls{display:grid;gap:10px}
+  .ctrl{background:#0e1730;border:1px solid #1a2a48;border-radius:12px;padding:10px}
+  .ctrl label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:6px}
+  input[type=range], input[type=number], select{width:100%}
+  button{background:#0e1730;border:1px solid #1a2a48;color:var(--ink);border-radius:10px;padding:8px 10px;cursor:pointer}
+  .hint{color:var(--mut);font-size:12px}
+  .pane{background:#0f1734;border:1px solid #1a2a48;border-radius:12px;padding:8px}
+  svg{width:100%;height:380px;display:block}
+  .grid line{stroke:var(--grid);stroke-width:1}
+  .axis{stroke:#d6def7;stroke-width:1}
+  .label{fill:var(--mut);font-size:11px}
+  .curve{fill:none;stroke-width:1.6;stroke:#7aa2ff;opacity:.28}
+  .mean{fill:none;stroke:var(--gold);stroke-width:3}
+  .recon{fill:none;stroke:#ff7aa2;stroke-width:3}
+  .mode{fill:none;stroke-width:2.2}
+  .m1{stroke:#ff8a00}
+  .m2{stroke:#34d399}
+  .m3{stroke:#60a5fa}
+  .bar{fill:#7aa2ff}
+  .dot{fill:#ff6e8a;opacity:.85}
+  .pill{display:inline-block;background:#0e1730;border:1px solid #1a2a48;border-radius:10px;padding:4px 8px;color:#aab7dd;font-size:12px}
+  .marker{fill:#ffd84d;stroke:#0b1220;stroke-width:2}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sandbox — HRV Recovery + FPCA (Animated, with Overshoot)</h1>
+  <div class="row">
+    <div class="ctrls">
+      <div class="ctrl">
+        <label><span>Drop sharpness</span><span class="pill" id="sharpVal">1.00</span></label>
+        <input id="sharp" type="range" min="0.5" max="1.5" step="0.01" value="1.00" />
+      </div>
+      <div class="ctrl">
+        <label><span># background curves</span><span class="pill" id="nVal">50</span></label>
+        <input id="nBg" type="range" min="0" max="100" step="1" value="50" />
+      </div>
+      <div class="ctrl">
+        <label><span>Random seed</span><span class="pill" id="seedVal">42</span></label>
+        <input id="seed" type="number" min="0" max="999999" value="42" />
+      </div>
+      <div class="ctrl">
+        <label><span>Overshoot rate</span><span class="pill" id="osRateVal">0.40</span></label>
+        <input id="osRate" type="range" min="0" max="1" step="0.05" value="0.40" />
+        <label><span>Overshoot amplitude</span><span class="pill" id="osAmpVal">0.35×</span></label>
+        <input id="osAmp" type="range" min="0.1" max="0.7" step="0.05" value="0.35" />
+      </div>
+      <div class="ctrl">
+        <button id="regen">Regenerate</button>
+        <button id="fpca">Compute FPCA</button>
+      </div>
+      <div class="ctrl">
+        <label><span>Animation mode</span></label>
+        <select id="animMode">
+          <option value="sweep">Sweep over μ(t)</option>
+          <option value="morph">Morph FPCA (μ + a₁φ₁ + a₂φ₂ + a₃φ₃)</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label><span>Speed</span><span class="pill" id="spdVal">1.00×</span></label>
+        <input id="speed" type="range" min="0.25" max="3" step="0.05" value="1.00" />
+      </div>
+      <div class="ctrl">
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div class="ctrl">
+        <button id="csv">Download CSV</button>
+        <div class="hint">CSV columns: time_h, aguda, doble, normal, bg_01…</div>
+      </div>
+      <div class="ctrl">
+        <div class="hint">The morph uses the first 3 FPCA modes. Press “Compute FPCA” before playing “Morph”.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pane" style="margin-bottom:8px">
+        <div class="pill">HRV Curves (20–100 ms) — Mean (gold) — Animated reconstruction / marker</div>
+        <svg id="svgCurves" viewBox="0 0 800 380"></svg>
+      </div>
+      <div class="pane">
+        <div class="pill">FPCA — μ(t) ± 2√λ φ(t) — Scree & Scores</div>
+        <svg id="svgFPCA" viewBox="0 0 800 380"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ----- Utility & Data generation -----
+  const H0 = 72;
+  const N = 361; // samples across 0..24h
+  const times = Array.from({length:N}, (_,i)=> 24*i/(N-1));
+
+  function ease(u){ u = Math.max(0, Math.min(1, u)); return u*u*(3-2*u); }
+  function adjustHmin(Hmin, sharp){
+    const r = Hmin / H0; const r2 = 1 - sharp*(1 - r); return H0 * r2;
+  }
+  function mulberry32(a) {
+    return function() {
+      var t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+  }
+  function randBetween(rng,a,b){ return a + (b-a)*rng(); }
+
+  // Overshoot helper: shape with a bump above baseline then settle
+  function withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown){
+    // yDrop: value after drop (near minimum), then we push above baseline and settle
+    return function(t){
+      if(t <= tStart) return null; // not used before start
+      if(t <= tPeak){ // exponential up towards baseline + amp
+        const target = H0 + amp;
+        const tauUp = (tPeak - tStart)/2;
+        return yDrop + (target - yDrop) * (1 - Math.exp(-(t - tStart)/tauUp));
+      } else { // settle back to final target slightly below/around baseline
+        const yPeak = withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown)(tPeak);
+        const target2 = H0 + 0.0; // settle near baseline (can tweak)
+        return target2 + (yPeak - target2) * Math.exp(-lamDown * (t - tPeak));
+      }
+    }
+  }
+
+  function f_aguda(sharp){
+    const d=4, Hmin=adjustHmin(35, sharp), Htar=70, lam=0.25;
+    return (t)=> t<=d ? ( H0 + (Hmin - H0)*ease(t/d) ) : ( Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)) );
+  }
+  function f_doble(sharp){
+    const d1=2, d2=2, gap=6, Hmin=adjustHmin(45, sharp), lamMid=0.35, lamSlow=0.2;
+    return (t)=>{
+      if(t<=d1) return H0 + (Hmin - H0)*ease(t/d1);
+      if(t<gap) return H0 + (Hmin - H0)*Math.exp(-lamMid*(t - d1));
+      if(t<=gap+d2){
+        const Hpre2 = H0 + (Hmin - H0)*Math.exp(-lamMid*(gap - d1));
+        return Hpre2 + (Hmin - Hpre2)*ease((t-gap)/d2);
+      }
+      const Hend2=Hmin, Htar=60; return Htar + (Hend2 - Htar)*Math.exp(-lamSlow*(t - (gap + d2)));
+    }
+  }
+  function f_normal(sharp, overshoot=false, amp=8){
+    const d=2, Hmin=adjustHmin(50, sharp), Htar=80, lam=0.45;
+    return (t)=>{
+      if(t<=d) return H0 + (Hmin - H0)*ease(t/d);
+      if(!overshoot){ return Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)); }
+      // with overshoot: short bump above baseline then settle to Htar
+      const tStart = d;
+      const tPeak  = d + 4;
+      const yMin   = Hmin;
+      const up = withOvershoot(yMin, tStart, amp, tPeak, 24, 0.25);
+      const yUp = up(t);
+      if(yUp!==null){
+        // after peak, drift to Htar instead of H0
+        if(t > tPeak){
+          const yAtPeak = up(tPeak);
+          return Htar + (yAtPeak - Htar) * Math.exp(-0.25*(t - tPeak));
+        }
+        return yUp;
+      }
+      return Htar + (Hmin - Htar)*Math.exp(-lam*(t - d));
+    }
+  }
+
+  function make_background_fn(rng, sharp, osRate, osAmp){
+    const isDouble = (rng()<0.5);
+    const willOvershoot = (rng() < osRate);
+    if(!isDouble){
+      const d1 = randBetween(rng,1,4);
+      const Hmin1 = adjustHmin(randBetween(rng,35,55), sharp);
+      const Htar = randBetween(rng,60,85);
+      const lam1 = randBetween(rng,0.25,0.65);
+      if(!willOvershoot){
+        return (t)=> t<=d1 ? ( H0 + (Hmin1 - H0)*ease(t/d1) ) : ( Htar + (Hmin1 - Htar)*Math.exp(-lam1*(t - d1)) );
+      } else {
+        // overshoot branch
+        const amp = osAmp * (H0 - Hmin1); // amplitude relative to drop
+        const tPeak = d1 + randBetween(rng,3,6);
+        return (t)=>{
+          if(t<=d1) return H0 + (Hmin1 - H0)*ease(t/d1);
+          if(t<=tPeak){
+            const target = H0 + amp;
+            const tauUp = (tPeak - d1)/2;
+            return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(t - d1)/tauUp));
+          }
+          // settle to final Htar
+          const target2 = Htar;
+          const yAtPeak = (function(){
+            const target = H0 + amp;
+            const tauUp = (tPeak - d1)/2;
+            return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(tPeak - d1)/tauUp));
+          })();
+          return target2 + (yAtPeak - target2) * Math.exp(-0.25*(t - tPeak));
+        };
+      }
+    } else {
+      const d1 = randBetween(rng,1,2), d2 = randBetween(rng,1,2), gap = randBetween(rng,5,7);
+      const Hmin1 = adjustHmin(randBetween(rng,42,55), sharp);
+      const Hmin2 = adjustHmin(randBetween(rng,42,55), sharp);
+      const Htar = randBetween(rng,55,70);
+      const lam1 = randBetween(rng,0.3,0.5), lam2 = randBetween(rng,0.18,0.35);
+      const overshoot2 = willOvershoot && rng()<0.6;
+      return (t)=>{
+        if(t<=d1) return H0 + (Hmin1 - H0)*ease(t/d1);
+        if(t<gap) return H0 + (Hmin1 - H0)*Math.exp(-lam1*(t - d1));
+        if(t<=gap+d2){
+          const Hpre2 = H0 + (Hmin1 - H0)*Math.exp(-lam1*(gap - d1));
+          return Hpre2 + (Hmin2 - Hpre2)*ease((t-gap)/d2);
+        }
+        if(!overshoot2){
+          const Hend2=Hmin2; return Htar + (Hend2 - Htar)*Math.exp(-lam2*(t - (gap + d2)));
+        } else {
+          const Hend2=Hmin2;
+          const tStart = gap + d2;
+          const tPeak  = tStart + randBetween(rng,2.5,5);
+          const amp = osAmp * (H0 - Hend2);
+          if(t<=tPeak){
+            const target = H0 + amp;
+            const tauUp = (tPeak - tStart)/2;
+            return Hend2 + (target - Hend2) * (1 - Math.exp(-(t - tStart)/tauUp));
+          }
+          const yAtPeak = (function(){
+            const target = H0 + amp, tauUp = (tPeak - tStart)/2;
+            return Hend2 + (target - Hend2) * (1 - Math.exp(-(tPeak - tStart)/tauUp));
+          })();
+          return Htar + (yAtPeak - Htar) * Math.exp(-0.22*(t - tPeak));
+        }
+      };
+    }
+  }
+
+  function buildDataset(sharp, nBg, seed, osRate, osAmp){
+    const rng = mulberry32(seed>>>0);
+    const ag = times.map(t => f_aguda(sharp)(t));
+    const db = times.map(t => f_doble(sharp)(t));
+    // Make the "normal" exemplar sometimes include overshoot (illustration)
+    const nm = times.map(t => f_normal(sharp, true, osAmp*(H0-50))(t));
+    const curves = [
+      {name:"aguda", y:ag},
+      {name:"doble", y:db},
+      {name:"normal",y:nm}
+    ];
+    for(let i=0;i<nBg;i++){
+      const fn = make_background_fn(rng, sharp, osRate, osAmp);
+      curves.push({name:`bg_${String(i+1).padStart(2,'0')}`, y:times.map(t=>fn(t))});
+    }
+    return {times, curves};
+  }
+
+  // ----- FPCA (top-3 via power iteration) -----
+  function mean(arr2d){
+    const n=arr2d.length, T=arr2d[0].length;
+    const mu = new Array(T).fill(0);
+    for(let i=0;i<n;i++){ const a=arr2d[i]; for(let t=0;t<T;t++) mu[t]+=a[t]; }
+    for(let t=0;t<T;t++) mu[t]/=n;
+    return mu;
+  }
+  function center(arr2d, mu){
+    const n=arr2d.length, T=mu.length;
+    const Xc = new Array(n);
+    for(let i=0;i<n;i++){ const row=new Array(T); for(let t=0;t<T;t++) row[t]=arr2d[i][t]-mu[t]; Xc[i]=row; }
+    return Xc;
+  }
+  function covMul(Xc, x){
+    const n = Xc.length, T = x.length;
+    const tmp = new Array(n).fill(0);
+    for(let i=0;i<n;i++){ let s=0, Xi=Xc[i]; for(let t=0;t<T;t++) s+=Xi[t]*x[t]; tmp[i]=s; }
+    const y = new Array(T).fill(0);
+    for(let t=0;t<T;t++){ let s=0; for(let i=0;i<n;i++) s+=Xc[i][t]*tmp[i]; y[t]=s/(n-1); }
+    return y;
+  }
+  function dot(a,b){let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s;}
+  function norm(a){return Math.sqrt(dot(a,a));}
+  function scale(a,c){return a.map(v=>v*c);}
+  function sub(a,b){const out=new Array(a.length); for(let i=0;i<a.length;i++) out[i]=a[i]-b[i]; return out;}
+  function powerIterationTopK(Xc, k=3, iters=250, tol=1e-9){
+    const T = Xc[0].length;
+    const vecs = []; const vals = [];
+    let Bmul = (x)=> covMul(Xc,x);
+    for(let j=0;j<k;j++){
+      let v = Array.from({length:T}, () => Math.random()*2-1);
+      for(let u of vecs){ const proj = dot(v,u); v = sub(v, scale(u, proj)); }
+      let nv = norm(v); v = scale(v, 1/(nv||1e-12)); let lam_old = 0;
+      for(let it=0; it<iters; it++){
+        let w = Bmul(v);
+        for(let u of vecs){ const coeff = dot(w,u); w = sub(w, scale(u, coeff)); }
+        const lam = dot(v, w); const nw = norm(w);
+        if(nw < 1e-14) break;
+        w = scale(w, 1/nw);
+        if(Math.abs(lam - lam_old) < tol) { v = w; lam_old = lam; break; }
+        v = w; lam_old = lam;
+      }
+      vecs.push(v); const y = covMul(Xc, v); const lam = dot(v,y); vals.push(lam);
+    }
+    return {vals, vecs};
+  }
+  function scoresFrom(Xc, vecs){
+    const n = Xc.length, k = vecs.length, scores = Array.from({length:n}, ()=> new Array(k).fill(0));
+    for(let i=0;i<n;i++){ for(let j=0;j<k;j++){ scores[i][j] = dot(Xc[i], vecs[j]); } }
+    return scores;
+  }
+
+  // ----- Plotting (SVG) -----
+  const svgCurves = document.getElementById('svgCurves');
+  const svgFPCA = document.getElementById('svgFPCA');
+  const pad = {l:50, r:16, t:18, b:36};
+  function scaleX(t){ return pad.l + (t/24)*(800-pad.l-pad.r); }
+  function scaleY(hrv){ const ymin=20, ymax=100; return pad.t + (1-(hrv - ymin)/(ymax - ymin))*(380-pad.t-pad.b); }
+  function pathFromSeries(y){
+    let d = ""; for(let i=0;i<times.length;i++){ const X = scaleX(times[i]), Y = scaleY(y[i]); d += (i===0 ? `M ${X} ${Y}` : ` L ${X} ${Y}`); } return d;
+  }
+  function clear(svg){ while(svg.firstChild) svg.removeChild(svg.firstChild); }
+  function grid(svg){
+    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("class","grid");
+    for(let t=0;t<=24;t+=4){ const x = scaleX(t); const ln = document.createElementNS(g.namespaceURI,"line"); ln.setAttribute("x1", x); ln.setAttribute("y1", pad.t); ln.setAttribute("x2", x); ln.setAttribute("y2", 380-pad.b); g.appendChild(ln); }
+    for(let yv=20; yv<=100; yv+=20){ const y = scaleY(yv); const ln = document.createElementNS(g.namespaceURI,"line"); ln.setAttribute("x1", pad.l); ln.setAttribute("y1", y); ln.setAttribute("x2", 800-pad.r); ln.setAttribute("y2", y); g.appendChild(ln); }
+    svg.appendChild(g);
+    const axX = document.createElementNS(g.namespaceURI,"line"); axX.setAttribute("class","axis"); axX.setAttribute("x1", pad.l); axX.setAttribute("y1", 380-pad.b); axX.setAttribute("x2", 800-pad.r); axX.setAttribute("y2", 380-pad.b); svg.appendChild(axX);
+    const axY = document.createElementNS(g.namespaceURI,"line"); axY.setAttribute("class","axis"); axY.setAttribute("x1", pad.l); axY.setAttribute("y1", 380-pad.b); axY.setAttribute("x2", pad.l); axY.setAttribute("y2", pad.t); svg.appendChild(axY);
+    function label(x,y,txt){ const t = document.createElementNS(g.namespaceURI,"text"); t.setAttribute("class","label"); t.setAttribute("x", x); t.setAttribute("y", y); t.textContent = txt; svg.appendChild(t); }
+    label(400, 380-8, "Time (hours)");
+    const ty = document.createElementNS(g.namespaceURI,"text"); ty.setAttribute("class","label"); ty.setAttribute("x", 12); ty.setAttribute("y", 200); ty.setAttribute("transform","rotate(-90, 12, 200)"); ty.textContent = "HRV (ms)"; svg.appendChild(ty);
+  }
+
+  function drawCurves(ds, animateDraw=false){
+    clear(svgCurves); grid(svgCurves);
+    for(const c of ds.curves){
+      if(c.name.startsWith("bg_")){
+        const p = document.createElementNS("http://www.w3.org/2000/svg","path");
+        p.setAttribute("class","curve"); p.setAttribute("d", pathFromSeries(c.y));
+        if(animateDraw){
+          const L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
+          setTimeout(()=>{ p.style.transition = "stroke-dashoffset 1.2s ease"; p.style.strokeDashoffset = "0"; }, 0);
+        }
+        svgCurves.appendChild(p);
+      }
+    }
+    const mu = mean(ds.curves.map(o=>o.y));
+    const pm = document.createElementNS("http://www.w3.org/2000/svg","path");
+    pm.setAttribute("class","mean"); pm.setAttribute("d", pathFromSeries(mu));
+    if(animateDraw){
+      const L = pm.getTotalLength(); pm.style.strokeDasharray = L; pm.style.strokeDashoffset = L;
+      setTimeout(()=>{ pm.style.transition = "stroke-dashoffset 1.2s ease"; pm.style.strokeDashoffset = "0"; }, 120);
+    }
+    svgCurves.appendChild(pm);
+  }
+
+  function drawFPCA(ds, fp){
+    clear(svgFPCA); grid(svgFPCA);
+    const mu = fp.mu;
+    const pm = document.createElementNS("http://www.w3.org/2000/svg","path");
+    pm.setAttribute("class","mean"); pm.setAttribute("d", pathFromSeries(mu));
+    svgFPCA.appendChild(pm);
+    const colors = ["m1","m2","m3"];
+    for(let k=0;k<Math.min(3, fp.vecs.length);k++){
+      const sc = 2*Math.sqrt(Math.max(0, fp.vals[k]));
+      const up = mu.map((m,i)=> m + sc*fp.vecs[k][i]);
+      const dn = mu.map((m,i)=> m - sc*fp.vecs[k][i]);
+      const p1 = document.createElementNS("http://www.w3.org/2000/svg","path"); p1.setAttribute("class","mode "+colors[k]); p1.setAttribute("d", pathFromSeries(up)); svgFPCA.appendChild(p1);
+      const p2 = document.createElementNS("http://www.w3.org/2000/svg","path"); p2.setAttribute("class","mode "+colors[k]); p2.setAttribute("d", pathFromSeries(dn)); svgFPCA.appendChild(p2);
+    }
+    // Scree (corner)
+    const total = fp.vals.reduce((a,b)=>a+Math.max(0,b),0) || 1;
+    const w0=12, gap=6, x0 = 800- (w0+gap)*fp.vals.length - 20, y0 = 60, h = 80;
+    for(let i=0;i<fp.vals.length;i++){
+      const frac = Math.max(0, fp.vals[i])/total;
+      const bh = frac * h;
+      const r = document.createElementNS("http://www.w3.org/2000/svg","rect");
+      r.setAttribute("class","bar"); r.setAttribute("x", x0 + i*(w0+gap)); r.setAttribute("y", y0 + (h-bh)); r.setAttribute("width", w0); r.setAttribute("height", bh); svgFPCA.appendChild(r);
+    }
+    // Scores PC1 vs PC2
+    const scores = fp.scores;
+    const xMin = Math.min(...scores.map(s=>s[0])), xMax = Math.max(...scores.map(s=>s[0]));
+    const yMin = Math.min(...scores.map(s=>s[1])), yMax = Math.max(...scores.map(s=>s[1]));
+    function sx(v){ return 520 + (v - xMin)/(xMax - xMin + 1e-9) * 260; }
+    function sy(v){ return 320 - (v - yMin)/(yMax - yMin + 1e-9) * 120; }
+    const lx = document.createElementNS("http://www.w3.org/2000/svg","line");
+    lx.setAttribute("class","axis"); lx.setAttribute("x1","520"); lx.setAttribute("y1","320"); lx.setAttribute("x2","780"); lx.setAttribute("y2","320"); svgFPCA.appendChild(lx);
+    const ly = document.createElementNS("http://www.w3.org/2000/svg","line");
+    ly.setAttribute("class","axis"); ly.setAttribute("x1","520"); ly.setAttribute("y1","320"); ly.setAttribute("x2","520"); ly.setAttribute("y2","200"); svgFPCA.appendChild(ly);
+    for(const s of scores){
+      const d = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      d.setAttribute("class","dot"); d.setAttribute("r","3.2");
+      d.setAttribute("cx", sx(s[0])); d.setAttribute("cy", sy(s[1]));
+      svgFPCA.appendChild(d);
+    }
+  }
+
+  // Reconstruction curve (for morph mode)
+  let reconPath = null, marker = null;
+  function ensureReconArtifacts(){
+    if(!reconPath){
+      reconPath = document.createElementNS("http://www.w3.org/2000/svg","path");
+      reconPath.setAttribute("class","recon");
+      svgCurves.appendChild(reconPath);
+    }
+    if(!marker){
+      marker = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      marker.setAttribute("class","marker"); marker.setAttribute("r","6");
+      svgCurves.appendChild(marker);
+    }
+  }
+
+  // ----- CSV download -----
+  function downloadCSV(ds){
+    const cols = ["time_h", "aguda","doble","normal"];
+    const extra = ds.curves.filter(c=>c.name.startsWith("bg_")).map(c=>c.name);
+    const header = cols.concat(extra);
+    const rows = [];
+    for(let i=0;i<times.length;i++){
+      const row = [times[i].toFixed(6),
+                   ds.curves[0].y[i].toFixed(6),
+                   ds.curves[1].y[i].toFixed(6),
+                   ds.curves[2].y[i].toFixed(6)];
+      for(const nm of extra){
+        const c = ds.curves.find(o=>o.name===nm);
+        row.push(c.y[i].toFixed(6));
+      }
+      rows.push(row.join(","));
+    }
+    const csv = header.join(",") + "\\n" + rows.join("\\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "hrv_simulation_sandbox.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ----- UI glue & animation loop -----
+  const elSharp = document.getElementById("sharp");
+  const elSharpVal = document.getElementById("sharpVal");
+  const elN = document.getElementById("nBg");
+  const elNVal = document.getElementById("nVal");
+  const elSeed = document.getElementById("seed");
+  const elSeedVal = document.getElementById("seedVal");
+  const elOsRate = document.getElementById("osRate");
+  const elOsRateVal = document.getElementById("osRateVal");
+  const elOsAmp = document.getElementById("osAmp");
+  const elOsAmpVal = document.getElementById("osAmpVal");
+  const btnRegen = document.getElementById("regen");
+  const btnFPCA = document.getElementById("fpca");
+  const btnCSV = document.getElementById("csv");
+  const modeSel = document.getElementById("animMode");
+  const speedEl = document.getElementById("speed");
+  const spdVal = document.getElementById("spdVal");
+  const btnPlay = document.getElementById("play");
+  const btnPause = document.getElementById("pause");
+  const btnReset = document.getElementById("reset");
+
+  let DS = buildDataset(parseFloat(elSharp.value), parseInt(elN.value,10), parseInt(elSeed.value,10),
+                        parseFloat(elOsRate.value), parseFloat(elOsAmp.value));
+  drawCurves(DS, true);
+
+  function updateLabels(){
+    elSharpVal.textContent = parseFloat(elSharp.value).toFixed(2);
+    elNVal.textContent = String(parseInt(elN.value,10));
+    elSeedVal.textContent = String(parseInt(elSeed.value,10));
+    elOsRateVal.textContent = parseFloat(elOsRate.value).toFixed(2);
+    elOsAmpVal.textContent = parseFloat(elOsAmp.value).toFixed(2) + "×";
+    spdVal.textContent = parseFloat(speedEl.value).toFixed(2) + "×";
+  }
+  updateLabels();
+
+  elSharp.addEventListener("input", updateLabels);
+  elN.addEventListener("input", updateLabels);
+  elSeed.addEventListener("input", updateLabels);
+  elOsRate.addEventListener("input", updateLabels);
+  elOsAmp.addEventListener("input", updateLabels);
+  speedEl.addEventListener("input", updateLabels);
+
+  btnRegen.addEventListener("click", ()=>{
+    DS = buildDataset(parseFloat(elSharp.value), parseInt(elN.value,10), parseInt(elSeed.value,10),
+                      parseFloat(elOsRate.value), parseFloat(elOsAmp.value));
+    drawCurves(DS, true);
+    FP = null;
+    stop();
+  });
+
+  // FPCA state
+  let FP = null;
+  btnFPCA.addEventListener("click", ()=>{
+    const X = DS.curves.map(o=>o.y);
+    const mu = mean(X);
+    const Xc = center(X, mu);
+    const res = powerIterationTopK(Xc, 3, 250, 1e-9);
+    const scores = scoresFrom(Xc, res.vecs);
+    FP = {mu, vals:res.vals, vecs:res.vecs, scores};
+    drawFPCA(DS, FP);
+  });
+
+  btnCSV.addEventListener("click", ()=> downloadCSV(DS));
+
+  // Animation
+  let raf = null, running=false, t0=0, acc=0;
+  function start(){
+    if(running) return;
+    running = true;
+    t0 = performance.now();
+    acc = 0;
+    ensureReconArtifacts();
+    raf = requestAnimationFrame(loop);
+  }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=null; }
+  function reset(){ stop(); acc=0; updateFrame(0); }
+
+  btnPlay.addEventListener("click", start);
+  btnPause.addEventListener("click", stop);
+  btnReset.addEventListener("click", reset);
+
+  function loop(ts){
+    const dt = (ts - t0)/1000; t0 = ts;
+    const speed = parseFloat(speedEl.value);
+    acc += dt * speed; // seconds scaled
+    updateFrame(acc);
+    if(running) raf = requestAnimationFrame(loop);
+  }
+
+  function updateFrame(sec){
+    const mode = modeSel.value;
+    const mu = mean(DS.curves.map(o=>o.y));
+    if(mode === "sweep"){
+      // sweep marker over mean
+      const period = 6.0; // seconds per full sweep
+      const u = (sec / period) % 1.0;
+      const idx = Math.min(N-1, Math.floor(u * (N-1)));
+      const y = mu[idx];
+      const xPix = scaleX(times[idx]), yPix = scaleY(y);
+      if(marker){ marker.setAttribute("cx", xPix); marker.setAttribute("cy", yPix); }
+      if(reconPath){ reconPath.setAttribute("d", pathFromSeries(mu.slice(0, idx+1))); }
+    } else {
+      // morph through FPCA: μ + a1 φ1 + a2 φ2 + a3 φ3
+      if(!FP){ return; } // need to compute FPCA first
+      const phi1 = FP.vecs[0], phi2 = FP.vecs[1], phi3 = FP.vecs[2] || FP.vecs[1];
+      const A1 = 2*Math.sqrt(Math.max(0, FP.vals[0]));
+      const A2 = 2*Math.sqrt(Math.max(0, FP.vals[1]));
+      const A3 = 2*Math.sqrt(Math.max(0, FP.vals[2] || FP.vals[1]));
+      const w1 = 2*Math.PI/7.0, w2 = 2*Math.PI/9.0, w3 = 2*Math.PI/11.0;
+      const a1 = A1 * Math.sin(w1 * sec);
+      const a2 = A2 * Math.cos(w2 * sec);
+      const a3 = A3 * Math.sin(w3 * sec + Math.PI/4);
+      const yrec = mu.map((m,i)=> m + a1*phi1[i] + a2*phi2[i] + a3*phi3[i]);
+      if(reconPath){ reconPath.setAttribute("d", pathFromSeries(yrec)); }
+      const u = (sec / 6.0) % 1.0; const idx = Math.min(N-1, Math.floor(u*(N-1)));
+      if(marker){ marker.setAttribute("cx", scaleX(times[idx])); marker.setAttribute("cy", scaleY(yrec[idx])); }
+    }
+  }
+
+  // init marker/reconstruction
+  ensureReconArtifacts();
+  updateFrame(0);
+})();
+</script>
+</body>
+</html>
