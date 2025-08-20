@@ -36,6 +36,10 @@
   .dot{fill:#ff6e8a;opacity:.85}
   .pill{display:inline-block;background:#0e1730;border:1px solid #1a2a48;border-radius:10px;padding:4px 8px;color:#aab7dd;font-size:12px}
   .marker{fill:#ffd84d;stroke:#0b1220;stroke-width:2}
+
+  /* === NUEVO: sombreado de “good/bad recovery” en FPCA === */
+  .goodArea { fill: #22c55e; opacity: 0.16; }
+  .badArea  { fill: #ef4444; opacity: 0.16; }
 </style>
 </head>
 <body>
@@ -124,18 +128,17 @@
   }
   function randBetween(rng,a,b){ return a + (b-a)*rng(); }
 
-  // Overshoot helper: shape with a bump above baseline then settle
+  // Overshoot helper
   function withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown){
-    // yDrop: value after drop (near minimum), then we push above baseline and settle
     return function(t){
-      if(t <= tStart) return null; // not used before start
-      if(t <= tPeak){ // exponential up towards baseline + amp
+      if(t <= tStart) return null;
+      if(t <= tPeak){
         const target = H0 + amp;
         const tauUp = (tPeak - tStart)/2;
         return yDrop + (target - yDrop) * (1 - Math.exp(-(t - tStart)/tauUp));
-      } else { // settle back to final target slightly below/around baseline
+      } else {
         const yPeak = withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown)(tPeak);
-        const target2 = H0 + 0.0; // settle near baseline (can tweak)
+        const target2 = H0 + 0.0;
         return target2 + (yPeak - target2) * Math.exp(-lamDown * (t - tPeak));
       }
     }
@@ -162,14 +165,10 @@
     return (t)=>{
       if(t<=d) return H0 + (Hmin - H0)*ease(t/d);
       if(!overshoot){ return Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)); }
-      // with overshoot: short bump above baseline then settle to Htar
-      const tStart = d;
-      const tPeak  = d + 4;
-      const yMin   = Hmin;
+      const tStart = d, tPeak  = d + 4, yMin = Hmin;
       const up = withOvershoot(yMin, tStart, amp, tPeak, 24, 0.25);
       const yUp = up(t);
       if(yUp!==null){
-        // after peak, drift to Htar instead of H0
         if(t > tPeak){
           const yAtPeak = up(tPeak);
           return Htar + (yAtPeak - Htar) * Math.exp(-0.25*(t - tPeak));
@@ -191,8 +190,7 @@
       if(!willOvershoot){
         return (t)=> t<=d1 ? ( H0 + (Hmin1 - H0)*ease(t/d1) ) : ( Htar + (Hmin1 - Htar)*Math.exp(-lam1*(t - d1)) );
       } else {
-        // overshoot branch
-        const amp = osAmp * (H0 - Hmin1); // amplitude relative to drop
+        const amp = osAmp * (H0 - Hmin1);
         const tPeak = d1 + randBetween(rng,3,6);
         return (t)=>{
           if(t<=d1) return H0 + (Hmin1 - H0)*ease(t/d1);
@@ -201,11 +199,9 @@
             const tauUp = (tPeak - d1)/2;
             return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(t - d1)/tauUp));
           }
-          // settle to final Htar
           const target2 = Htar;
           const yAtPeak = (function(){
-            const target = H0 + amp;
-            const tauUp = (tPeak - d1)/2;
+            const target = H0 + amp, tauUp = (tPeak - d1)/2;
             return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(tPeak - d1)/tauUp));
           })();
           return target2 + (yAtPeak - target2) * Math.exp(-0.25*(t - tPeak));
@@ -251,7 +247,6 @@
     const rng = mulberry32(seed>>>0);
     const ag = times.map(t => f_aguda(sharp)(t));
     const db = times.map(t => f_doble(sharp)(t));
-    // Make the "normal" exemplar sometimes include overshoot (illustration)
     const nm = times.map(t => f_normal(sharp, true, osAmp*(H0-50))(t));
     const curves = [
       {name:"aguda", y:ag},
@@ -364,12 +359,57 @@
     svgCurves.appendChild(pm);
   }
 
+  /* === NUEVO: helper para polígonos de área entre dos curvas === */
+  function areaPolygonPath(yTop, yBottom){
+    // yTop/yBottom son arrays (mismo largo) en unidades de HRV
+    const n = times.length;
+    let d = "";
+    // borde superior izquierda -> derecha
+    for(let i=0;i<n;i++){
+      const X = scaleX(times[i]), Y = scaleY(yTop[i]);
+      d += (i===0 ? `M ${X} ${Y}` : ` L ${X} ${Y}`);
+    }
+    // borde inferior derecha -> izquierda
+    for(let i=n-1;i>=0;i--){
+      const X = scaleX(times[i]), Y = scaleY(yBottom[i]);
+      d += ` L ${X} ${Y}`;
+    }
+    return d + " Z";
+  }
+
   function drawFPCA(ds, fp){
     clear(svgFPCA); grid(svgFPCA);
     const mu = fp.mu;
+
+    /* === NUEVO: zonas verde/roja basadas en la 1ª componente === */
+    if(fp.vecs && fp.vecs.length > 0){
+      const phi1 = fp.vecs[0];
+      const sc1  = 2*Math.sqrt(Math.max(0, fp.vals[0])); // ±2√λ1
+      const up   = mu.map((m,i)=> m + sc1*phi1[i]);
+      const dn   = mu.map((m,i)=> m - sc1*phi1[i]);
+
+      // Área “good recovery”: entre up y mu
+      const areaGood = document.createElementNS("http://www.w3.org/2000/svg","path");
+      const areaBad = document.createElementNS("http://www.w3.org/2000/svg","path");
+
+      areaGood.setAttribute("d", areaPolygonPath(mu, dn));
+      areaGood.setAttribute("class","goodArea");
+
+        // Área “bad recovery”: entre mu y dn
+      areaBad.setAttribute("d", areaPolygonPath(up, mu));
+      areaBad.setAttribute("class","badArea");
+      
+      svgFPCA.appendChild(areaGood);
+      svgFPCA.appendChild(areaBad);
+    }
+    /* === FIN NUEVO === */
+
+    // Curva media
     const pm = document.createElementNS("http://www.w3.org/2000/svg","path");
     pm.setAttribute("class","mean"); pm.setAttribute("d", pathFromSeries(mu));
     svgFPCA.appendChild(pm);
+
+    // Envelopes ±2√λ φ(t) para los primeros 3 modos
     const colors = ["m1","m2","m3"];
     for(let k=0;k<Math.min(3, fp.vecs.length);k++){
       const sc = 2*Math.sqrt(Math.max(0, fp.vals[k]));
@@ -378,6 +418,7 @@
       const p1 = document.createElementNS("http://www.w3.org/2000/svg","path"); p1.setAttribute("class","mode "+colors[k]); p1.setAttribute("d", pathFromSeries(up)); svgFPCA.appendChild(p1);
       const p2 = document.createElementNS("http://www.w3.org/2000/svg","path"); p2.setAttribute("class","mode "+colors[k]); p2.setAttribute("d", pathFromSeries(dn)); svgFPCA.appendChild(p2);
     }
+
     // Scree (corner)
     const total = fp.vals.reduce((a,b)=>a+Math.max(0,b),0) || 1;
     const w0=12, gap=6, x0 = 800- (w0+gap)*fp.vals.length - 20, y0 = 60, h = 80;
@@ -387,6 +428,7 @@
       const r = document.createElementNS("http://www.w3.org/2000/svg","rect");
       r.setAttribute("class","bar"); r.setAttribute("x", x0 + i*(w0+gap)); r.setAttribute("y", y0 + (h-bh)); r.setAttribute("width", w0); r.setAttribute("height", bh); svgFPCA.appendChild(r);
     }
+
     // Scores PC1 vs PC2
     const scores = fp.scores;
     const xMin = Math.min(...scores.map(s=>s[0])), xMax = Math.max(...scores.map(s=>s[0]));
@@ -437,7 +479,7 @@
       }
       rows.push(row.join(","));
     }
-    const csv = header.join(",") + "\\n" + rows.join("\\n");
+    const csv = header.join(",") + "\n" + rows.join("\n");
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -539,8 +581,7 @@
     const mode = modeSel.value;
     const mu = mean(DS.curves.map(o=>o.y));
     if(mode === "sweep"){
-      // sweep marker over mean
-      const period = 6.0; // seconds per full sweep
+      const period = 6.0;
       const u = (sec / period) % 1.0;
       const idx = Math.min(N-1, Math.floor(u * (N-1)));
       const y = mu[idx];
@@ -548,8 +589,7 @@
       if(marker){ marker.setAttribute("cx", xPix); marker.setAttribute("cy", yPix); }
       if(reconPath){ reconPath.setAttribute("d", pathFromSeries(mu.slice(0, idx+1))); }
     } else {
-      // morph through FPCA: μ + a1 φ1 + a2 φ2 + a3 φ3
-      if(!FP){ return; } // need to compute FPCA first
+      if(!FP){ return; }
       const phi1 = FP.vecs[0], phi2 = FP.vecs[1], phi3 = FP.vecs[2] || FP.vecs[1];
       const A1 = 2*Math.sqrt(Math.max(0, FP.vals[0]));
       const A2 = 2*Math.sqrt(Math.max(0, FP.vals[1]));
