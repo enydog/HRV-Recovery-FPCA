@@ -1,84 +1,142 @@
-# HRV Recovery Analysis with Functional PCA (FPCA)
+# Functional Principal Component Analysis of HRV Recovery Trajectories in Endurance Athletes
 
-This repository contains the code, simulations, and documentation for analyzing **heart rate variability (HRV) recovery** using **Functional Principal Component Analysis (FPCA)**.  
-The goal is to provide a mathematical and visual framework to better understand how different athletes respond to training stress and how they recover.
+**Author:** Gabriel Della Mattia  
+**Date:** August 16, 2019  
 
----
+## Abstract
 
-## 📖 Description
-**HRV** (commonly measured as *rMSSD*) drops after a training session and gradually returns to baseline.  
-Traditional methods often reduce this dynamic to a scalar value (e.g., pre vs. post difference), losing valuable information from the **entire recovery curve**.  
+Heart rate variability (HRV) dynamics following training sessions provide insight into the balance between physiological stress and recovery. Traditional approaches often reduce HRV to scalar summaries, overlooking the information contained in the full recovery trajectory. This study applies **Functional Principal Component Analysis (FPCA)** to HRV recovery profiles, enabling multidimensional characterization of features such as depth of suppression, speed of return, and potential overshoot.
 
-**FPCA** allows:
-- Decomposition of recovery curves into orthogonal components.
-- Identification of physiological patterns such as:
-  - **Magnitude of the initial drop**
-  - **Speed of recovery**
-  - **Rebound or overshoot**
+An interactive sandbox is provided as an educational tool to illustrate FPCA principles. All analyses and validations presented here are performed on HRV data from endurance athletes of the **AGMT2 Team**, ensuring ecological validity under real training conditions.
 
----
-
-## 🧮 Mathematical Framework
-Given the HRV recovery trajectory of an athlete \( X_i(t) \):
-
-\[
-X_i(t) = \mu(t) + \sum_{k=1}^{K} \xi_{ik} \, \phi_k(t)
-\]
-
-- \( \mu(t) \): mean recovery curve.  
-- \( \phi_k(t) \): orthogonal functions (principal modes).  
-- \( \xi_{ik} \): subject-specific FPCA scores (numerical signature in FPCA space).  
-
-Each mode has a physiological interpretation:
-1. **PC1** – Depth of the initial drop.  
-2. **PC2** – Speed of recovery.  
-3. **PC3** – Rebound / oscillation.  
-
----
-
-## 🎛️ Interactive Sandbox
-Includes an HTML/JS simulator where users can manipulate parameters of hrv curves and observe how FPCA components change in real time.
-
-**Main controls:**
-- `Drop sharpness`: modifies the exponential constant \( \alpha \), controlling the initial drop.  
-- `Overshoot rate` and `Overshoot amplitude`: add a sinusoidal component \( B e^{-\gamma t}\sin(\beta t) \).  
-- `Random seed`: controls stochastic variability \( \epsilon(t) \).  
-- `Number of curves`: defines the group size for simulation \( N \).  
+🔗 [Interactive FPCA Sandbox](https://enydog.github.io/HRV-Recovery-FPCA/)
 
 <a href="https://enydog.github.io/HRV-Recovery-FPCA/" target="_blank">
   <img src="https://img.shields.io/badge/Open-Sandbox-blue?style=for-the-badge">
 </a>
+
+---
+
+## Introduction
+
+Heart rate variability (HRV), commonly quantified through the root mean square of successive differences (rMSSD), typically decreases immediately after exercise and then returns toward baseline with varying shapes and time courses. Treating these recovery profiles as continuous functions, rather than discrete endpoints, allows for deeper physiological interpretation.  
+
+This work integrates an educational simulator for conceptual visualization with empirical analyses performed on AGMT2 Team athletes. Unless explicitly indicated as sandbox illustration, all reported results derive from real athlete data.
+
+---
+
+## Mathematical Framework
+
+Let **Xi(t)** denote the HRV recovery trajectory of athlete *i* over time *t ∈ [0, T]* after a training session.  
+
+- FPCA expands each trajectory as:
+
+
+- **µ(t):** functional mean  
+- **ϕk(t):** orthogonal eigenfunctions  
+- **ξik:** subject-specific scores  
+- **λk:** variance explained by each component  
+
+---
+
+## Physiological Interpretation
+
+The leading FPCA modes map onto physiologically interpretable recovery features:
+
+- **PC1 – Depth of suppression:** strong vs. mild post-exercise HRV depression  
+- **PC2 – Recovery rate:** fast vs. slow return to baseline  
+- **PC3 – Overshoot/rebound:** oscillatory or secondary dips during recovery  
+
+---
+
+## Data Acquisition and Preprocessing
+
+### Wearable Logging  
+- Devices: Garmin Forerunner FR955/FR965  
+- Sampling: 1 HRV snapshot every 3 minutes (24h, 481 points/day)  
+- Export: .FIT files → parsed offline to Parquet/CSV  
+
+### Preprocessing Protocol  
+1. Time normalization and segmentation  
+2. Physiological range checks (10–250 ms)  
+3. Successive-difference rule for artifacts  
+4. Robust smoothing (Tukey biweight + Savitzky–Golay)  
+5. Non-wear/shower detection  
+6. Imputation for short gaps (<15 min)  
+7. Final quality control (≥70% valid samples/day)  
+
+### Reproducibility  
+- Deterministic parsing and QC pipeline  
+- Conservative thresholds fixed a priori  
+- Sensitivity analyses confirm robustness  
+
+---
+
+## Dataset and Statistical Characterization
+
+- **Cohort:** 35 competitive amateur triathletes (AGMT2 Team)  
+- **Duration:** ~200 days per athlete  
+- **Coverage:** ~7,000 athlete-days, >3.3 million HRV samples  
+
+### Data Volume  
+- 481 temporal samples per day (3-min resolution)  
+
+### Temporal Consistency  
+- >95% of days with complete coverage  
+- Double-training days flagged for archetype analysis  
+
+---
+
+## FPCA Decomposition
+
+HRV trajectories are expressed as:  
+
+
+- First three components: suppression depth, recovery speed, rebound  
+- Score scatter plots reveal clustering of recovery archetypes  
+
+---
+
+## Strengths and Limitations
+
+**Strengths**  
+- Large longitudinal dataset (~7,000 athlete-days)  
+- Ecological validity under real-world conditions  
+- High temporal resolution (3-min sampling)  
+- Both intra- and inter-individual variability captured  
+
+**Limitations**  
+- Cohort limited to competitive amateur triathletes  
+- HRV measured with wrist-worn devices (vs. ECG gold standard)  
+- Narrow demographic distribution  
+- No external validation yet performed  
+
+---
+
+## Applications
+
+1. **Recovery archetypes:** classification of athletes by recovery profile  
+2. **Training load monitoring:** detection of atypical recovery patterns  
+3. **Predictive modeling:** FPCA-derived scores for machine learning applications  
+4. **Performance context:** linking recovery archetypes to training outcomes  
+
+---
+
+## Conclusion
+
+FPCA provides a rigorous and physiologically interpretable framework for analyzing HRV recovery dynamics in endurance athletes. By decomposing trajectories into orthogonal modes, latent processes such as suppression depth, recovery speed, and rebound are revealed—insights that scalar metrics cannot capture.  
+
+All empirical findings are derived from AGMT2 Team athletes, ensuring real-world validity. The educational sandbox serves only as an illustrative tool.  
+
+This approach demonstrates FPCA’s potential for both academic characterization of recovery heterogeneity and practical athlete monitoring. Future work should expand validation, integrate additional biomarkers, and explore predictive modeling for readiness-to-train applications.  
+
+---
+
+## References
+
+- Ramsay, J. O., & Silverman, B. W. (2005). *Functional Data Analysis.* Springer.  
+- Esco, M. R., & Flatt, A. A. (2021). Heart rate variability and endurance training adaptation: A review. *Sports, 9(6), 85.*
+
+
+
  
----
-
-## 📊 Visualizations
-The repository includes:
-- HRV recovery curves with highlighted mean curve.  
-- FPCA decomposition showing:
-  - Variance explained by each component.  
-  - Distribution of athletes in the PC1–PC2 space.  
-  - Animated reconstructions of trajectories.  
-
----
-
-## 🚀 Applications
-- Identification of **recovery archetypes** (fast vs. slow, with or without rebound).  
-- Monitoring **training load** and detecting maladaptation.  
-- Personalized **readiness prediction models** using FPCA scores.  
-
----
-
-## 📚 References
-- Ramsay, J. O., & Silverman, B. W. (2005). *Functional Data Analysis*. Springer.  
-- Esco, M. R., & Flatt, A. A. (2021). *Heart rate variability and endurance training adaptation: A review*. Sports, 9(6), 85.  
-
----
-
-## 👤 Author
-**Gabriel Della Mattia**  
-Engineer and data scientist specialized in endurance sports.  
-
----
-
-## 📄 License
-This project is licensed under the MIT License. You are free to use and adapt it, provided you cite the source.
