@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HRV + FPCA (Animated, with Overshoot) Gabriel Della Mattia EDNCAORE AI 2023</title>
+<title>HRV + FPCA (Animated, multi-athlete) — Gabriel Della Mattia EDNCORE AI 2023</title>
 <style>
   :root{
     --bg:#0b1220; --panel:#101a33; --ink:#e7eefc; --mut:#a5b4d6; --grid:#223455;
-    --c1:#4caf50; --c2:#ffb86b; --c3:#ff6e8a; --c4:#7aa2f7; --gold:#ffd84d;
+    --gold:#ffd84d;
   }
   html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,Segoe UI,Inter,Arial}
   .wrap{max-width:1200px;margin:18px auto;padding:0 16px}
   h1{font-size:22px;margin:4px 0 8px}
   .card{background:var(--panel);border:1px solid #1a2a48;border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.35);padding:12px}
-  .row{display:grid;grid-template-columns:320px 1fr;gap:14px}
+  .row{display:grid;grid-template-columns:340px 1fr;gap:14px}
   .ctrls{display:grid;gap:10px}
   .ctrl{background:#0e1730;border:1px solid #1a2a48;border-radius:12px;padding:10px}
   .ctrl label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:6px}
@@ -25,8 +25,8 @@
   .grid line{stroke:var(--grid);stroke-width:1}
   .axis{stroke:#d6def7;stroke-width:1}
   .label{fill:var(--mut);font-size:11px}
-  .curve{fill:none;stroke-width:1.6;stroke:#7aa2ff;opacity:.28}
-  .mean{fill:none;stroke:var(--gold);stroke-width:3}
+  .curve{fill:none;stroke-width:1.4;opacity:.22} /* color se setea inline por atleta */
+  .mean{fill:none;stroke-width:2.6}             /* color se setea inline por atleta */
   .recon{fill:none;stroke:#ff7aa2;stroke-width:3}
   .mode{fill:none;stroke-width:2.2}
   .m1{stroke:#ff8a00}
@@ -36,39 +36,55 @@
   .dot{fill:#ff6e8a;opacity:.85}
   .pill{display:inline-block;background:#0e1730;border:1px solid #1a2a48;border-radius:10px;padding:4px 8px;color:#aab7dd;font-size:12px}
   .marker{fill:#ffd84d;stroke:#0b1220;stroke-width:2}
-
-  /* === NUEVO: sombreado de “good/bad recovery” en FPCA === */
   .goodArea { fill: #22c55e; opacity: 0.16; }
   .badArea  { fill: #ef4444; opacity: 0.16; }
+
+  /* leyenda atletas */
+  .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .badge{display:flex;align-items:center;gap:6px;border:1px solid #1a2a48;background:#0e1730;border-radius:999px;padding:3px 8px;font-size:12px;color:#c8d2f0}
+  .sw{width:10px;height:10px;border-radius:50%}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Sandbox — HRV Recovery + FPCA (Animated, with Overshoot)</h1>
+  <h1>Sandbox — HRV Recovery + FPCA (Animated, multi-athlete)</h1>
   <div class="row">
     <div class="ctrls">
       <div class="ctrl">
         <label><span>Drop sharpness</span><span class="pill" id="sharpVal">1.00</span></label>
         <input id="sharp" type="range" min="0.5" max="1.5" step="0.01" value="1.00" />
       </div>
+
       <div class="ctrl">
-        <label><span># background curves</span><span class="pill" id="nVal">50</span></label>
-        <input id="nBg" type="range" min="0" max="100" step="1" value="50" />
+        <label><span># curvas por atleta</span><span class="pill" id="nVal">50</span></label>
+        <input id="nBg" type="range" min="0" max="200" step="5" value="50" />
       </div>
+
+      <div class="ctrl">
+        <label><span>Atletas totales</span><span class="pill" id="nTotVal">35</span></label>
+        <input id="nTot" type="range" min="1" max="35" step="1" value="35" />
+        <label><span>Mostrar (primeros N)</span><span class="pill" id="nShowVal">6</span></label>
+        <input id="nShow" type="range" min="1" max="35" step="1" value="6" />
+        <div class="hint">Se dibujan solo los primeros N atletas para mantener el rendimiento.</div>
+      </div>
+
       <div class="ctrl">
         <label><span>Random seed</span><span class="pill" id="seedVal">42</span></label>
         <input id="seed" type="number" min="0" max="999999" value="42" />
       </div>
+
       <div class="ctrl">
         <label><span>Overshoot rate</span><span class="pill" id="osRateVal">0.40</span></label>
         <input id="osRate" type="range" min="0" max="1" step="0.05" value="0.40" />
         <label><span>Overshoot amplitude</span><span class="pill" id="osAmpVal">0.35×</span></label>
         <input id="osAmp" type="range" min="0.1" max="0.7" step="0.05" value="0.35" />
       </div>
+
       <div class="ctrl">
         <button id="regen">Regenerate</button>
         <button id="fpca">Compute FPCA</button>
       </div>
+
       <div class="ctrl">
         <label><span>Animation mode</span></label>
         <select id="animMode">
@@ -76,31 +92,40 @@
           <option value="morph">Morph FPCA (μ + a₁φ₁ + a₂φ₂ + a₃φ₃)</option>
         </select>
       </div>
+
       <div class="ctrl">
         <label><span>Speed</span><span class="pill" id="spdVal">1.00×</span></label>
         <input id="speed" type="range" min="0.25" max="3" step="0.05" value="1.00" />
       </div>
+
       <div class="ctrl">
         <button id="play">Play</button>
         <button id="pause">Pause</button>
         <button id="reset">Reset</button>
       </div>
+
       <div class="ctrl">
         <button id="csv">Download CSV</button>
-        <div class="hint">CSV columns: time_h, aguda, doble, normal, bg_01…</div>
+        <div class="hint">CSV: athlete_id, time_h, aguda, doble, normal, bg_01…</div>
       </div>
+
       <div class="ctrl">
-        <div class="hint">The morph uses the first 3 FPCA modes. Press “Compute FPCA” before playing “Morph”.</div>
+        <div class="pill" id="totalsPill">Total curvas (visibles): —</div>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="ctrl">
+        <div class="hint">El morph usa los 3 primeros modos de la FPCA sobre los atletas visibles.</div>
       </div>
     </div>
 
     <div class="card">
       <div class="pane" style="margin-bottom:8px">
-        <div class="pill">HRV Curves (20–100 ms) — Mean (gold) — Animated reconstruction / marker</div>
+        <div class="pill">HRV Curves (20–100 ms) — μ por atleta (color) — Recon animada / marcador (Atleta 01)</div>
         <svg id="svgCurves" viewBox="0 0 800 380"></svg>
       </div>
       <div class="pane">
-        <div class="pill">FPCA — μ(t) ± 2√λ φ(t) — Scree & Scores</div>
+        <div class="pill">FPCA (sobre visibles) — μ(t) ± 2√λ φ(t) — Scree & Scores</div>
         <svg id="svgFPCA" viewBox="0 0 800 380"></svg>
       </div>
     </div>
@@ -109,9 +134,9 @@
 
 <script>
 (function(){
-  // ----- Utility & Data generation -----
+  // ===== Utility & base timeline =====
   const H0 = 72;
-  const N = 361; // samples across 0..24h
+  const N = 481; // samples across 0..24h
   const times = Array.from({length:N}, (_,i)=> 24*i/(N-1));
 
   function ease(u){ u = Math.max(0, Math.min(1, u)); return u*u*(3-2*u); }
@@ -128,8 +153,17 @@
   }
   function randBetween(rng,a,b){ return a + (b-a)*rng(); }
 
-  // Overshoot helper
-  function withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown){
+  // Simple palette of 35 distinct-ish colors (HSL -> hex precomputed-ish)
+  const ATH_COLORS = [
+    "#7aa2f7","#34d399","#f472b6","#f59e0b","#60a5fa","#22c55e","#e879f9","#ef4444",
+    "#10b981","#a78bfa","#fb7185","#c084fc","#f97316","#06b6d4","#84cc16","#eab308",
+    "#14b8a6","#8b5cf6","#f43f5e","#38bdf8","#d946ef","#facc15","#4ade80","#fda4af",
+    "#93c5fd","#2dd4bf","#fca5a5","#fcd34d","#a3e635","#67e8f9","#c7d2fe","#86efac",
+    "#f0abfc","#fde68a","#99f6e4"
+  ];
+
+  // ===== Overshoot helper & canonical shapes =====
+  function withOvershoot(yDrop, tStart, amp, tPeak, lamDown){
     return function(t){
       if(t <= tStart) return null;
       if(t <= tPeak){
@@ -137,36 +171,38 @@
         const tauUp = (tPeak - tStart)/2;
         return yDrop + (target - yDrop) * (1 - Math.exp(-(t - tStart)/tauUp));
       } else {
-        const yPeak = withOvershoot(yDrop, tStart, amp, tPeak, tSettle, lamDown)(tPeak);
-        const target2 = H0 + 0.0;
+        const upLocal = withOvershoot(yDrop, tStart, amp, tPeak, lamDown);
+        const yPeak = upLocal(tPeak);
+        const target2 = H0;
         return target2 + (yPeak - target2) * Math.exp(-lamDown * (t - tPeak));
       }
     }
   }
 
-  function f_aguda(sharp){
+  function f_aguda(sharp, H0_local=H0){
     const d=4, Hmin=adjustHmin(35, sharp), Htar=70, lam=0.25;
-    return (t)=> t<=d ? ( H0 + (Hmin - H0)*ease(t/d) ) : ( Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)) );
+    return (t)=> t<=d ? ( H0_local + (Hmin - H0_local)*ease(t/d) )
+                      : ( Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)) );
   }
-  function f_doble(sharp){
+  function f_doble(sharp, H0_local=H0){
     const d1=2, d2=2, gap=6, Hmin=adjustHmin(45, sharp), lamMid=0.35, lamSlow=0.2;
     return (t)=>{
-      if(t<=d1) return H0 + (Hmin - H0)*ease(t/d1);
-      if(t<gap) return H0 + (Hmin - H0)*Math.exp(-lamMid*(t - d1));
+      if(t<=d1) return H0_local + (Hmin - H0_local)*ease(t/d1);
+      if(t<gap)  return H0_local + (Hmin - H0_local)*Math.exp(-lamMid*(t - d1));
       if(t<=gap+d2){
-        const Hpre2 = H0 + (Hmin - H0)*Math.exp(-lamMid*(gap - d1));
+        const Hpre2 = H0_local + (Hmin - H0_local)*Math.exp(-lamMid*(gap - d1));
         return Hpre2 + (Hmin - Hpre2)*ease((t-gap)/d2);
       }
       const Hend2=Hmin, Htar=60; return Htar + (Hend2 - Htar)*Math.exp(-lamSlow*(t - (gap + d2)));
     }
   }
-  function f_normal(sharp, overshoot=false, amp=8){
+  function f_normal(sharp, overshoot, amp, H0_local=H0){
     const d=2, Hmin=adjustHmin(50, sharp), Htar=80, lam=0.45;
     return (t)=>{
-      if(t<=d) return H0 + (Hmin - H0)*ease(t/d);
+      if(t<=d) return H0_local + (Hmin - H0_local)*ease(t/d);
       if(!overshoot){ return Htar + (Hmin - Htar)*Math.exp(-lam*(t - d)); }
       const tStart = d, tPeak  = d + 4, yMin = Hmin;
-      const up = withOvershoot(yMin, tStart, amp, tPeak, 24, 0.25);
+      const up = withOvershoot(yMin, tStart, amp, tPeak, 0.25);
       const yUp = up(t);
       if(yUp!==null){
         if(t > tPeak){
@@ -179,7 +215,7 @@
     }
   }
 
-  function make_background_fn(rng, sharp, osRate, osAmp){
+  function make_background_fn(rng, sharp, osRate, osAmp, H0_local=H0){
     const isDouble = (rng()<0.5);
     const willOvershoot = (rng() < osRate);
     if(!isDouble){
@@ -188,23 +224,23 @@
       const Htar = randBetween(rng,60,85);
       const lam1 = randBetween(rng,0.25,0.65);
       if(!willOvershoot){
-        return (t)=> t<=d1 ? ( H0 + (Hmin1 - H0)*ease(t/d1) ) : ( Htar + (Hmin1 - Htar)*Math.exp(-lam1*(t - d1)) );
+        return (t)=> t<=d1 ? ( H0_local + (Hmin1 - H0_local)*ease(t/d1) )
+                           : ( Htar + (Hmin1 - Htar)*Math.exp(-lam1*(t - d1)) );
       } else {
-        const amp = osAmp * (H0 - Hmin1);
+        const amp = osAmp * (H0_local - Hmin1);
         const tPeak = d1 + randBetween(rng,3,6);
         return (t)=>{
-          if(t<=d1) return H0 + (Hmin1 - H0)*ease(t/d1);
+          if(t<=d1) return H0_local + (Hmin1 - H0_local)*ease(t/d1);
           if(t<=tPeak){
-            const target = H0 + amp;
+            const target = H0_local + amp;
             const tauUp = (tPeak - d1)/2;
             return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(t - d1)/tauUp));
           }
-          const target2 = Htar;
           const yAtPeak = (function(){
-            const target = H0 + amp, tauUp = (tPeak - d1)/2;
+            const target = H0_local + amp, tauUp = (tPeak - d1)/2;
             return Hmin1 + (target - Hmin1) * (1 - Math.exp(-(tPeak - d1)/tauUp));
           })();
-          return target2 + (yAtPeak - target2) * Math.exp(-0.25*(t - tPeak));
+          return Htar + (yAtPeak - Htar) * Math.exp(-0.25*(t - tPeak));
         };
       }
     } else {
@@ -215,10 +251,10 @@
       const lam1 = randBetween(rng,0.3,0.5), lam2 = randBetween(rng,0.18,0.35);
       const overshoot2 = willOvershoot && rng()<0.6;
       return (t)=>{
-        if(t<=d1) return H0 + (Hmin1 - H0)*ease(t/d1);
-        if(t<gap) return H0 + (Hmin1 - H0)*Math.exp(-lam1*(t - d1));
+        if(t<=d1) return H0_local + (Hmin1 - H0_local)*ease(t/d1);
+        if(t<gap)  return H0_local + (Hmin1 - H0_local)*Math.exp(-lam1*(t - d1));
         if(t<=gap+d2){
-          const Hpre2 = H0 + (Hmin1 - H0)*Math.exp(-lam1*(gap - d1));
+          const Hpre2 = H0_local + (Hmin1 - H0_local)*Math.exp(-lam1*(gap - d1));
           return Hpre2 + (Hmin2 - Hpre2)*ease((t-gap)/d2);
         }
         if(!overshoot2){
@@ -227,14 +263,14 @@
           const Hend2=Hmin2;
           const tStart = gap + d2;
           const tPeak  = tStart + randBetween(rng,2.5,5);
-          const amp = osAmp * (H0 - Hend2);
+          const amp = osAmp * (H0_local - Hend2);
           if(t<=tPeak){
-            const target = H0 + amp;
+            const target = H0_local + amp;
             const tauUp = (tPeak - tStart)/2;
             return Hend2 + (target - Hend2) * (1 - Math.exp(-(t - tStart)/tauUp));
           }
           const yAtPeak = (function(){
-            const target = H0 + amp, tauUp = (tPeak - tStart)/2;
+            const target = H0_local + amp, tauUp = (tPeak - tStart)/2;
             return Hend2 + (target - Hend2) * (1 - Math.exp(-(tPeak - tStart)/tauUp));
           })();
           return Htar + (yAtPeak - Htar) * Math.exp(-0.22*(t - tPeak));
@@ -243,24 +279,35 @@
     }
   }
 
-  function buildDataset(sharp, nBg, seed, osRate, osAmp){
-    const rng = mulberry32(seed>>>0);
-    const ag = times.map(t => f_aguda(sharp)(t));
-    const db = times.map(t => f_doble(sharp)(t));
-    const nm = times.map(t => f_normal(sharp, true, osAmp*(H0-50))(t));
-    const curves = [
-      {name:"aguda", y:ag},
-      {name:"doble", y:db},
-      {name:"normal",y:nm}
-    ];
-    for(let i=0;i<nBg;i++){
-      const fn = make_background_fn(rng, sharp, osRate, osAmp);
-      curves.push({name:`bg_${String(i+1).padStart(2,'0')}`, y:times.map(t=>fn(t))});
+  // ===== Multi-athlete dataset =====
+  function buildDatasetMulti(sharp, nBgPerAth, seed, osRate, osAmp, nAthletes){
+    const athletes = [];
+    for(let a=1; a<=nAthletes; a++){
+      const color = ATH_COLORS[(a-1) % ATH_COLORS.length];
+      const rngA  = mulberry32((seed + a*9973) >>> 0);
+
+      // leve variación base por atleta
+      const H0shift = randBetween(rngA, -2.0, 2.0);
+      const H0_local = H0 + H0shift;
+
+      const ag = times.map(t => f_aguda(sharp, H0_local)(t));
+      const db = times.map(t => f_doble(sharp, H0_local)(t));
+      const nm = times.map(t => f_normal(sharp, true, osAmp*(H0_local-50), H0_local)(t));
+      const curves = [
+        {name:"aguda", y:ag},
+        {name:"doble", y:db},
+        {name:"normal",y:nm}
+      ];
+      for(let i=0;i<nBgPerAth;i++){
+        const fn = make_background_fn(rngA, sharp, osRate, osAmp, H0_local);
+        curves.push({name:`bg_${String(i+1).padStart(2,'0')}`, y:times.map(t=>fn(t))});
+      }
+      athletes.push({id:a, color, curves});
     }
-    return {times, curves};
+    return {times, athletes};
   }
 
-  // ----- FPCA (top-3 via power iteration) -----
+  // ===== FPCA (igual que tu versión) =====
   function mean(arr2d){
     const n=arr2d.length, T=arr2d[0].length;
     const mu = new Array(T).fill(0);
@@ -313,9 +360,10 @@
     return scores;
   }
 
-  // ----- Plotting (SVG) -----
+  // ===== Plotting helpers =====
   const svgCurves = document.getElementById('svgCurves');
   const svgFPCA = document.getElementById('svgFPCA');
+  const legendEl = document.getElementById('legend');
   const pad = {l:50, r:16, t:18, b:36};
   function scaleX(t){ return pad.l + (t/24)*(800-pad.l-pad.r); }
   function scaleY(hrv){ const ymin=20, ymax=100; return pad.t + (1-(hrv - ymin)/(ymax - ymin))*(380-pad.t-pad.b); }
@@ -336,80 +384,101 @@
     const ty = document.createElementNS(g.namespaceURI,"text"); ty.setAttribute("class","label"); ty.setAttribute("x", 12); ty.setAttribute("y", 200); ty.setAttribute("transform","rotate(-90, 12, 200)"); ty.textContent = "HRV (ms)"; svg.appendChild(ty);
   }
 
-  function drawCurves(ds, animateDraw=false){
-    clear(svgCurves); grid(svgCurves);
-    for(const c of ds.curves){
-      if(c.name.startsWith("bg_")){
-        const p = document.createElementNS("http://www.w3.org/2000/svg","path");
-        p.setAttribute("class","curve"); p.setAttribute("d", pathFromSeries(c.y));
-        if(animateDraw){
-          const L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
-          setTimeout(()=>{ p.style.transition = "stroke-dashoffset 1.2s ease"; p.style.strokeDashoffset = "0"; }, 0);
-        }
-        svgCurves.appendChild(p);
-      }
-    }
-    const mu = mean(ds.curves.map(o=>o.y));
-    const pm = document.createElementNS("http://www.w3.org/2000/svg","path");
-    pm.setAttribute("class","mean"); pm.setAttribute("d", pathFromSeries(mu));
-    if(animateDraw){
-      const L = pm.getTotalLength(); pm.style.strokeDasharray = L; pm.style.strokeDashoffset = L;
-      setTimeout(()=>{ pm.style.transition = "stroke-dashoffset 1.2s ease"; pm.style.strokeDashoffset = "0"; }, 120);
-    }
-    svgCurves.appendChild(pm);
-  }
-
-  /* === NUEVO: helper para polígonos de área entre dos curvas === */
   function areaPolygonPath(yTop, yBottom){
-    // yTop/yBottom son arrays (mismo largo) en unidades de HRV
     const n = times.length;
     let d = "";
-    // borde superior izquierda -> derecha
-    for(let i=0;i<n;i++){
-      const X = scaleX(times[i]), Y = scaleY(yTop[i]);
-      d += (i===0 ? `M ${X} ${Y}` : ` L ${X} ${Y}`);
-    }
-    // borde inferior derecha -> izquierda
-    for(let i=n-1;i>=0;i--){
-      const X = scaleX(times[i]), Y = scaleY(yBottom[i]);
-      d += ` L ${X} ${Y}`;
-    }
+    for(let i=0;i<n;i++){ const X = scaleX(times[i]), Y = scaleY(yTop[i]); d += (i===0 ? `M ${X} ${Y}` : ` L ${X} ${Y}`); }
+    for(let i=n-1;i>=0;i--){ const X = scaleX(times[i]), Y = scaleY(yBottom[i]); d += ` L ${X} ${Y}`; }
     return d + " Z";
   }
 
-  function drawFPCA(ds, fp){
-    clear(svgFPCA); grid(svgFPCA);
-    const mu = fp.mu;
+  function drawCurves(DS, nShow, animateDraw=false){
+    clear(svgCurves); grid(svgCurves);
+    legendEl.innerHTML = "";
+    const showAthletes = DS.athletes.slice(0, nShow);
+    // Background curves por atleta (color propio)
+    for(const A of showAthletes){
+      for(const c of A.curves){
+        if(c.name.startsWith("bg_")){
+          const p = document.createElementNS("http://www.w3.org/2000/svg","path");
+          p.setAttribute("class","curve"); p.setAttribute("d", pathFromSeries(c.y));
+          p.setAttribute("stroke", A.color);
+          if(animateDraw){
+            const L = p.getTotalLength(); p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
+            setTimeout(()=>{ p.style.transition = "stroke-dashoffset 0.9s ease"; p.style.strokeDashoffset = "0"; }, 0);
+          }
+          svgCurves.appendChild(p);
+        }
+      }
+    }
 
-    /* === NUEVO: zonas verde/roja basadas en la 1ª componente === */
+    // Medias por atleta: en su color (trazo normal)
+    for (const A of showAthletes) {
+      const muA = mean(A.curves.map(o => o.y));
+      const pm = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      pm.setAttribute("class", "mean");
+      pm.setAttribute("d", pathFromSeries(muA));
+      pm.setAttribute("stroke", A.color);   // color del atleta
+      pm.style.strokeWidth = "2";           // grosor medio
+      svgCurves.appendChild(pm);
+
+      // leyenda (sin cambios)
+      const b = document.createElement("div"); b.className = "badge";
+      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = A.color;
+      const tx = document.createElement("span"); tx.textContent = `Atleta ${String(A.id).padStart(2,"0")}`;
+      b.appendChild(sw); b.appendChild(tx); legendEl.appendChild(b);
+    }
+
+    // === Media GLOBAL (roja) sobre atletas visibles ===
+    const XallVisible = showAthletes.flatMap(A => A.curves.map(c => c.y));
+    if (XallVisible.length) {
+      const muGlobal = mean(XallVisible);
+      const pG = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      pG.setAttribute("class", "mean");
+      pG.setAttribute("d", pathFromSeries(muGlobal));
+      pG.setAttribute("stroke", "#ff3b3b"); // ROJO
+      pG.style.strokeWidth = "4";           // más gruesa para destacar
+      pG.style.opacity = "0.95";
+      svgCurves.appendChild(pG);
+
+      // (Opcional) badge para la media global
+      const bad = document.createElement("div"); bad.className = "badge";
+      const swg = document.createElement("span"); swg.className = "sw"; swg.style.background = "#ff3b3b";
+      const txg = document.createElement("span"); txg.textContent = "μ global (visibles)";
+      bad.appendChild(swg); bad.appendChild(txg); legendEl.appendChild(bad);
+    }
+
+  }
+
+  function drawFPCA(DS, nShow, fp){
+    clear(svgFPCA); grid(svgFPCA);
+    // μ combinado sobre curvas de atletas visibles
+    const Xall = DS.athletes.slice(0,nShow).flatMap(A => A.curves.map(c=>c.y));
+    const mu = fp.mu || mean(Xall);
+
+    // Zonas verdes/rojas usando φ1
     if(fp.vecs && fp.vecs.length > 0){
       const phi1 = fp.vecs[0];
-      const sc1  = 2*Math.sqrt(Math.max(0, fp.vals[0])); // ±2√λ1
+      const sc1  = 2*Math.sqrt(Math.max(0, fp.vals[0]));
       const up   = mu.map((m,i)=> m + sc1*phi1[i]);
       const dn   = mu.map((m,i)=> m - sc1*phi1[i]);
-
-      // Área “good recovery”: entre up y mu
       const areaGood = document.createElementNS("http://www.w3.org/2000/svg","path");
-      const areaBad = document.createElementNS("http://www.w3.org/2000/svg","path");
-
+      const areaBad  = document.createElementNS("http://www.w3.org/2000/svg","path");
       areaGood.setAttribute("d", areaPolygonPath(mu, dn));
       areaGood.setAttribute("class","goodArea");
-
-        // Área “bad recovery”: entre mu y dn
       areaBad.setAttribute("d", areaPolygonPath(up, mu));
       areaBad.setAttribute("class","badArea");
-      
       svgFPCA.appendChild(areaGood);
       svgFPCA.appendChild(areaBad);
     }
-    /* === FIN NUEVO === */
 
-    // Curva media
+    // μ
     const pm = document.createElementNS("http://www.w3.org/2000/svg","path");
     pm.setAttribute("class","mean"); pm.setAttribute("d", pathFromSeries(mu));
+    pm.setAttribute("stroke", "#ffd84d");
     svgFPCA.appendChild(pm);
 
-    // Envelopes ±2√λ φ(t) para los primeros 3 modos
+    // Envelopes ±2√λ φ(t)
     const colors = ["m1","m2","m3"];
     for(let k=0;k<Math.min(3, fp.vecs.length);k++){
       const sc = 2*Math.sqrt(Math.max(0, fp.vals[k]));
@@ -419,7 +488,7 @@
       const p2 = document.createElementNS("http://www.w3.org/2000/svg","path"); p2.setAttribute("class","mode "+colors[k]); p2.setAttribute("d", pathFromSeries(dn)); svgFPCA.appendChild(p2);
     }
 
-    // Scree (corner)
+    // Scree
     const total = fp.vals.reduce((a,b)=>a+Math.max(0,b),0) || 1;
     const w0=12, gap=6, x0 = 800- (w0+gap)*fp.vals.length - 20, y0 = 60, h = 80;
     for(let i=0;i<fp.vals.length;i++){
@@ -430,24 +499,26 @@
     }
 
     // Scores PC1 vs PC2
-    const scores = fp.scores;
-    const xMin = Math.min(...scores.map(s=>s[0])), xMax = Math.max(...scores.map(s=>s[0]));
-    const yMin = Math.min(...scores.map(s=>s[1])), yMax = Math.max(...scores.map(s=>s[1]));
-    function sx(v){ return 520 + (v - xMin)/(xMax - xMin + 1e-9) * 260; }
-    function sy(v){ return 320 - (v - yMin)/(yMax - yMin + 1e-9) * 120; }
-    const lx = document.createElementNS("http://www.w3.org/2000/svg","line");
-    lx.setAttribute("class","axis"); lx.setAttribute("x1","520"); lx.setAttribute("y1","320"); lx.setAttribute("x2","780"); lx.setAttribute("y2","320"); svgFPCA.appendChild(lx);
-    const ly = document.createElementNS("http://www.w3.org/2000/svg","line");
-    ly.setAttribute("class","axis"); ly.setAttribute("x1","520"); ly.setAttribute("y1","320"); ly.setAttribute("x2","520"); ly.setAttribute("y2","200"); svgFPCA.appendChild(ly);
-    for(const s of scores){
-      const d = document.createElementNS("http://www.w3.org/2000/svg","circle");
-      d.setAttribute("class","dot"); d.setAttribute("r","3.2");
-      d.setAttribute("cx", sx(s[0])); d.setAttribute("cy", sy(s[1]));
-      svgFPCA.appendChild(d);
+    const scores = fp.scores || [];
+    if(scores.length){
+      const xMin = Math.min(...scores.map(s=>s[0])), xMax = Math.max(...scores.map(s=>s[0]));
+      const yMin = Math.min(...scores.map(s=>s[1])), yMax = Math.max(...scores.map(s=>s[1]));
+      function sx(v){ return 520 + (v - xMin)/(xMax - xMin + 1e-9) * 260; }
+      function sy(v){ return 320 - (v - yMin)/(yMax - yMin + 1e-9) * 120; }
+      const lx = document.createElementNS("http://www.w3.org/2000/svg","line");
+      lx.setAttribute("class","axis"); lx.setAttribute("x1","520"); lx.setAttribute("y1","320"); lx.setAttribute("x2","780"); lx.setAttribute("y2","320"); svgFPCA.appendChild(lx);
+      const ly = document.createElementNS("http://www.w3.org/2000/svg","line");
+      ly.setAttribute("class","axis"); ly.setAttribute("x1","520"); ly.setAttribute("y1","320"); ly.setAttribute("x2","520"); ly.setAttribute("y2","200"); svgFPCA.appendChild(ly);
+      for(const s of scores){
+        const d = document.createElementNS("http://www.w3.org/2000/svg","circle");
+        d.setAttribute("class","dot"); d.setAttribute("r","3.2");
+        d.setAttribute("cx", sx(s[0])); d.setAttribute("cy", sy(s[1]));
+        svgFPCA.appendChild(d);
+      }
     }
   }
 
-  // Reconstruction curve (for morph mode)
+  // Recon artifacts (mantener animación)
   let reconPath = null, marker = null;
   function ensureReconArtifacts(){
     if(!reconPath){
@@ -462,97 +533,139 @@
     }
   }
 
-  // ----- CSV download -----
-  function downloadCSV(ds){
-    const cols = ["time_h", "aguda","doble","normal"];
-    const extra = ds.curves.filter(c=>c.name.startsWith("bg_")).map(c=>c.name);
-    const header = cols.concat(extra);
+  // ===== CSV =====
+  function downloadCSV(DS, nShow){
     const rows = [];
-    for(let i=0;i<times.length;i++){
-      const row = [times[i].toFixed(6),
-                   ds.curves[0].y[i].toFixed(6),
-                   ds.curves[1].y[i].toFixed(6),
-                   ds.curves[2].y[i].toFixed(6)];
-      for(const nm of extra){
-        const c = ds.curves.find(o=>o.name===nm);
-        row.push(c.y[i].toFixed(6));
+    rows.push(["athlete_id","time_h","aguda","doble","normal","...bg"].join(","));
+    const showAthletes = DS.athletes.slice(0,nShow);
+    for(const A of showAthletes){
+      const base = ["aguda","doble","normal"];
+      const extras = A.curves.filter(c=>c.name.startsWith("bg_")).map(c=>c.name);
+      for(let i=0;i<times.length;i++){
+        const vals = [];
+        for(const nm of base){
+          const c = A.curves.find(o=>o.name===nm);
+          vals.push(c.y[i].toFixed(6));
+        }
+        // opcional: una de las bg para muestra (o podrías volcar todas)
+        const bg1 = A.curves.find(o=>o.name==="bg_01");
+        const bgv = bg1 ? bg1.y[i].toFixed(6) : "";
+        rows.push([A.id, times[i].toFixed(6), ...vals, bgv].join(","));
       }
-      rows.push(row.join(","));
     }
-    const csv = header.join(",") + "\n" + rows.join("\n");
+    const csv = rows.join("\n");
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "hrv_simulation_sandbox.csv";
+    a.href = url; a.download = "hrv_multi_athletes.csv";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  // ----- UI glue & animation loop -----
-  const elSharp = document.getElementById("sharp");
-  const elSharpVal = document.getElementById("sharpVal");
-  const elN = document.getElementById("nBg");
-  const elNVal = document.getElementById("nVal");
-  const elSeed = document.getElementById("seed");
+  // ===== UI & state =====
+  const elSharp   = document.getElementById("sharp");
+  const elSharpVal= document.getElementById("sharpVal");
+  const elN       = document.getElementById("nBg");
+  const elNVal    = document.getElementById("nVal");
+  const elSeed    = document.getElementById("seed");
   const elSeedVal = document.getElementById("seedVal");
-  const elOsRate = document.getElementById("osRate");
-  const elOsRateVal = document.getElementById("osRateVal");
-  const elOsAmp = document.getElementById("osAmp");
-  const elOsAmpVal = document.getElementById("osAmpVal");
-  const btnRegen = document.getElementById("regen");
-  const btnFPCA = document.getElementById("fpca");
-  const btnCSV = document.getElementById("csv");
-  const modeSel = document.getElementById("animMode");
-  const speedEl = document.getElementById("speed");
-  const spdVal = document.getElementById("spdVal");
-  const btnPlay = document.getElementById("play");
-  const btnPause = document.getElementById("pause");
-  const btnReset = document.getElementById("reset");
+  const elOsRate  = document.getElementById("osRate");
+  const elOsRateVal= document.getElementById("osRateVal");
+  const elOsAmp   = document.getElementById("osAmp");
+  const elOsAmpVal= document.getElementById("osAmpVal");
+  const elNTot    = document.getElementById("nTot");
+  const elNTotVal = document.getElementById("nTotVal");
+  const elNShow   = document.getElementById("nShow");
+  const elNShowVal= document.getElementById("nShowVal");
+  const totalsPill= document.getElementById("totalsPill");
 
-  let DS = buildDataset(parseFloat(elSharp.value), parseInt(elN.value,10), parseInt(elSeed.value,10),
-                        parseFloat(elOsRate.value), parseFloat(elOsAmp.value));
-  drawCurves(DS, true);
+  const btnRegen  = document.getElementById("regen");
+  const btnFPCA   = document.getElementById("fpca");
+  const btnCSV    = document.getElementById("csv");
+  const modeSel   = document.getElementById("animMode");
+  const speedEl   = document.getElementById("speed");
+  const spdVal    = document.getElementById("spdVal");
+  const btnPlay   = document.getElementById("play");
+  const btnPause  = document.getElementById("pause");
+  const btnReset  = document.getElementById("reset");
+
+  function updateTotals(){
+    const nShow = parseInt(elNShow.value,10);
+    const nBg   = parseInt(elN.value,10);
+    const totalVisible = nShow * (3 + nBg);
+    totalsPill.textContent = `Total curvas (visibles): ${totalVisible}`;
+  }
 
   function updateLabels(){
     elSharpVal.textContent = parseFloat(elSharp.value).toFixed(2);
-    elNVal.textContent = String(parseInt(elN.value,10));
-    elSeedVal.textContent = String(parseInt(elSeed.value,10));
-    elOsRateVal.textContent = parseFloat(elOsRate.value).toFixed(2);
+    elNVal.textContent     = String(parseInt(elN.value,10));
+    elSeedVal.textContent  = String(parseInt(elSeed.value,10));
+    elOsRateVal.textContent= parseFloat(elOsRate.value).toFixed(2);
     elOsAmpVal.textContent = parseFloat(elOsAmp.value).toFixed(2) + "×";
-    spdVal.textContent = parseFloat(speedEl.value).toFixed(2) + "×";
+    elNTotVal.textContent  = String(parseInt(elNTot.value,10));
+    elNShowVal.textContent = String(parseInt(elNShow.value,10));
+    spdVal.textContent     = parseFloat(speedEl.value).toFixed(2) + "×";
+    updateTotals();
   }
+
+  let DS = buildDatasetMulti(
+    parseFloat(elSharp.value),
+    parseInt(elN.value,10),
+    parseInt(elSeed.value,10),
+    parseFloat(elOsRate.value),
+    parseFloat(elOsAmp.value),
+    parseInt(elNTot.value,10)
+  );
   updateLabels();
-
-  elSharp.addEventListener("input", updateLabels);
-  elN.addEventListener("input", updateLabels);
-  elSeed.addEventListener("input", updateLabels);
-  elOsRate.addEventListener("input", updateLabels);
-  elOsAmp.addEventListener("input", updateLabels);
-  speedEl.addEventListener("input", updateLabels);
-
-  btnRegen.addEventListener("click", ()=>{
-    DS = buildDataset(parseFloat(elSharp.value), parseInt(elN.value,10), parseInt(elSeed.value,10),
-                      parseFloat(elOsRate.value), parseFloat(elOsAmp.value));
-    drawCurves(DS, true);
-    FP = null;
-    stop();
-  });
+  drawCurves(DS, parseInt(elNShow.value,10), true);
 
   // FPCA state
   let FP = null;
+
+  elSharp.addEventListener("input", updateLabels);
+  elN.addEventListener("input", ()=>{ updateLabels(); });
+  elSeed.addEventListener("input", updateLabels);
+  elOsRate.addEventListener("input", updateLabels);
+  elOsAmp.addEventListener("input", updateLabels);
+  elNTot.addEventListener("input", ()=>{
+    // Si bajás el total por debajo del mostrado, ajustamos nShow
+    if(parseInt(elNShow.value,10) > parseInt(elNTot.value,10)){
+      elNShow.value = elNTot.value;
+    }
+    updateLabels();
+  });
+  elNShow.addEventListener("input", updateLabels);
+  speedEl.addEventListener("input", updateLabels);
+
+  btnRegen.addEventListener("click", ()=>{
+    DS = buildDatasetMulti(
+      parseFloat(elSharp.value),
+      parseInt(elN.value,10),
+      parseInt(elSeed.value,10),
+      parseFloat(elOsRate.value),
+      parseFloat(elOsAmp.value),
+      parseInt(elNTot.value,10)
+    );
+    drawCurves(DS, parseInt(elNShow.value,10), true);
+    FP = null;
+    stop();
+    clear(svgFPCA); grid(svgFPCA); // limpiar FPCA hasta recalcular
+  });
+
   btnFPCA.addEventListener("click", ()=>{
-    const X = DS.curves.map(o=>o.y);
+    const nShow = parseInt(elNShow.value,10);
+    const X = DS.athletes.slice(0,nShow).flatMap(A => A.curves.map(c=>c.y));
     const mu = mean(X);
     const Xc = center(X, mu);
     const res = powerIterationTopK(Xc, 3, 250, 1e-9);
     const scores = scoresFrom(Xc, res.vecs);
     FP = {mu, vals:res.vals, vecs:res.vecs, scores};
-    drawFPCA(DS, FP);
+    drawFPCA(DS, nShow, FP);
   });
 
-  btnCSV.addEventListener("click", ()=> downloadCSV(DS));
+  btnCSV.addEventListener("click", ()=> downloadCSV(DS, parseInt(elNShow.value,10)));
 
-  // Animation
+  // ===== Animation (usa Atleta 01 para la curva de referencia) =====
   let raf = null, running=false, t0=0, acc=0;
   function start(){
     if(running) return;
@@ -572,22 +685,27 @@
   function loop(ts){
     const dt = (ts - t0)/1000; t0 = ts;
     const speed = parseFloat(speedEl.value);
-    acc += dt * speed; // seconds scaled
+    acc += dt * speed;
     updateFrame(acc);
     if(running) raf = requestAnimationFrame(loop);
   }
 
   function updateFrame(sec){
-    const mode = modeSel.value;
-    const mu = mean(DS.curves.map(o=>o.y));
+    // referenciamos el primer atleta (si existe)
+    const Ath1 = DS.athletes[0];
+    if(!Ath1) return;
+
+    const mu1 = mean(Ath1.curves.map(o=>o.y));
+    const mode = document.getElementById("animMode").value;
+
     if(mode === "sweep"){
       const period = 6.0;
       const u = (sec / period) % 1.0;
       const idx = Math.min(N-1, Math.floor(u * (N-1)));
-      const y = mu[idx];
+      const y = mu1[idx];
       const xPix = scaleX(times[idx]), yPix = scaleY(y);
       if(marker){ marker.setAttribute("cx", xPix); marker.setAttribute("cy", yPix); }
-      if(reconPath){ reconPath.setAttribute("d", pathFromSeries(mu.slice(0, idx+1))); }
+      if(reconPath){ reconPath.setAttribute("d", pathFromSeries(mu1.slice(0, idx+1))); }
     } else {
       if(!FP){ return; }
       const phi1 = FP.vecs[0], phi2 = FP.vecs[1], phi3 = FP.vecs[2] || FP.vecs[1];
@@ -598,16 +716,17 @@
       const a1 = A1 * Math.sin(w1 * sec);
       const a2 = A2 * Math.cos(w2 * sec);
       const a3 = A3 * Math.sin(w3 * sec + Math.PI/4);
-      const yrec = mu.map((m,i)=> m + a1*phi1[i] + a2*phi2[i] + a3*phi3[i]);
+      const yrec = mu1.map((m,i)=> m + a1*phi1[i] + a2*phi2[i] + a3*phi3[i]);
       if(reconPath){ reconPath.setAttribute("d", pathFromSeries(yrec)); }
       const u = (sec / 6.0) % 1.0; const idx = Math.min(N-1, Math.floor(u*(N-1)));
       if(marker){ marker.setAttribute("cx", scaleX(times[idx])); marker.setAttribute("cy", scaleY(yrec[idx])); }
     }
   }
 
-  // init marker/reconstruction
+  // init
   ensureReconArtifacts();
   updateFrame(0);
+  drawFPCA(DS, parseInt(elNShow.value,10), {mu:[], vals:[], vecs:[], scores:[]});
 })();
 </script>
 </body>
