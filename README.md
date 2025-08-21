@@ -15,6 +15,12 @@ An interactive sandbox is provided as an educational tool to illustrate FPCA pri
   <img src="https://img.shields.io/badge/Open-Sandbox-blue?style=for-the-badge">
 </a>
 
+<a href="[https://enydog.github.io/HRV-Recovery-FPCA/](https://drive.google.com/file/d/1Kpljz_HxjaXxfC4xYYauMLlOLxZH0q1J/view?usp=sharing)" target="_blank">
+  <img src="https://img.shields.io/badge/Open-White Paper-red?style=for-the-badge">
+</a>
+
+
+
 ---
 
 ## Introduction
