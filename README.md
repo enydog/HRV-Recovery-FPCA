@@ -11,12 +11,12 @@ Heart rate variability (HRV) dynamics following training sessions provide insigh
   <img src="https://img.shields.io/badge/Open-Sandbox-blue?style=for-the-badge">
 </a>
 
-<a href="[https://enydog.github.io/HRV-Recovery-FPCA/](https://drive.google.com/file/d/1Kpljz_HxjaXxfC4xYYauMLlOLxZH0q1J/view?usp=sharing)" target="_blank">
-  <img src="https://img.shields.io/badge/Open-White Paper-red?style=for-the-badge">
+<a href="https://drive.google.com/file/d/1Kpljz_HxjaXxfC4xYYauMLlOLxZH0q1J/view?usp=sharing" target="_blank">
+  <img src="https://img.shields.io/badge/Open-White%20Paper-red?style=for-the-badge">
 </a>
 
-<a href="[https://enydog.github.io/HRV-Recovery-FPCA/]([https://drive.google.com/file/d/1Kpljz_HxjaXxfC4xYYauMLlOLxZH0q1J/view?usp=sharing](https://www.facebook.com/photo/?fbid=10156730878943553&set=a.106898123552))" target="_blank">
-  <img src="https://img.shields.io/badge/Those were good times working in California.-green?style=for-the-badge">
+<a href="https://www.facebook.com/photo/?fbid=10156730878943553&set=a.106898123552" target="_blank">
+  <img src="https://img.shields.io/badge/Those%20were%20good%20times%20working%20in%20California.-green?style=for-the-badge">
 </a>
 
 
