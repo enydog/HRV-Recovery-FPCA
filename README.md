@@ -53,7 +53,7 @@ Includes an HTML/JS simulator where users can manipulate parameters of hrv curve
 
 ## 📊 Visualizations
 The repository includes:
-- Synthetic HRV recovery curves with highlighted mean curve.  
+- HRV recovery curves with highlighted mean curve.  
 - FPCA decomposition showing:
   - Variance explained by each component.  
   - Distribution of athletes in the PC1–PC2 space.  
