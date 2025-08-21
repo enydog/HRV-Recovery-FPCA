@@ -37,7 +37,7 @@ Each mode has a physiological interpretation:
 ---
 
 ## 🎛️ Interactive Sandbox
-Includes an HTML/JS simulator where users can manipulate parameters of synthetic curves and observe how FPCA components change in real time.
+Includes an HTML/JS simulator where users can manipulate parameters of hrv curves and observe how FPCA components change in real time.
 
 **Main controls:**
 - `Drop sharpness`: modifies the exponential constant \( \alpha \), controlling the initial drop.  
