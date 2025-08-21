@@ -7,10 +7,6 @@
 
 Heart rate variability (HRV) dynamics following training sessions provide insight into the balance between physiological stress and recovery. Traditional approaches often reduce HRV to scalar summaries, overlooking the information contained in the full recovery trajectory. This study applies **Functional Principal Component Analysis (FPCA)** to HRV recovery profiles, enabling multidimensional characterization of features such as depth of suppression, speed of return, and potential overshoot.
 
-An interactive sandbox is provided as an educational tool to illustrate FPCA principles. All analyses and validations presented here are performed on HRV data from endurance athletes of the **AGMT2 Team**, ensuring ecological validity under real training conditions.
-
-🔗 [Interactive FPCA Sandbox](https://enydog.github.io/HRV-Recovery-FPCA/)
-
 <a href="https://enydog.github.io/HRV-Recovery-FPCA/" target="_blank">
   <img src="https://img.shields.io/badge/Open-Sandbox-blue?style=for-the-badge">
 </a>
@@ -19,6 +15,9 @@ An interactive sandbox is provided as an educational tool to illustrate FPCA pri
   <img src="https://img.shields.io/badge/Open-White Paper-red?style=for-the-badge">
 </a>
 
+<a href="[https://enydog.github.io/HRV-Recovery-FPCA/]([https://drive.google.com/file/d/1Kpljz_HxjaXxfC4xYYauMLlOLxZH0q1J/view?usp=sharing](https://www.facebook.com/photo/?fbid=10156730878943553&set=a.106898123552))" target="_blank">
+  <img src="https://img.shields.io/badge/Those were good times working in California.-green?style=for-the-badge">
+</a>
 
 
 ---
